@@ -1,60 +1,775 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Phishing Email Detector</title>
+  <title>PhishGuard · Phishing Email Detector</title>
+  <script>
+    // Apply the saved theme before the page draws (avoids a flash)
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "dark";
+  </script>
   <style>
-    body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 40px 16px; color: #222; }
-    .card { max-width: 760px; margin: 0 auto; background: #fff; padding: 28px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.08); }
-    h1 { margin-top: 0; }
-    .sub { color: #666; }
-    textarea { width: 100%; height: 200px; padding: 12px; font-size: 15px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
-    button { margin-top: 12px; padding: 12px 24px; font-size: 16px; background: #2b5fd9; color: #fff; border: none; border-radius: 8px; cursor: pointer; }
-    .result { margin-top: 24px; padding: 18px; border-radius: 8px; }
-    .phishing { background: #fdecea; border-left: 6px solid #d93025; }
-    .legitimate { background: #e6f4ea; border-left: 6px solid #188038; }
-    table { width: 100%; border-collapse: collapse; }
-    td, th { padding: 6px 8px; border-bottom: 1px solid #ddd; text-align: left; }
-    .pos { color: #d93025; } .neg { color: #188038; }
-    .note { font-size: 13px; color: #777; margin-top: 20px; }
+    :root {
+      --radius: 14px;
+      --font: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+      --mono: "Cascadia Code", Consolas, "Courier New", monospace;
+    }
+    [data-theme="dark"] {
+      --bg: #0b1020; --bg2: #111830; --card: #151d36; --card2: #1b2544;
+      --border: #26325a; --text: #e7ecf7; --muted: #8f9bbd;
+      --accent: #5b8cff; --accent2: #8a5bff;
+      --danger: #ff5d6c; --danger-bg: rgba(255,93,108,.14);
+      --warn: #ffb547; --warn-bg: rgba(255,181,71,.14);
+      --safe: #2fd38a; --safe-bg: rgba(47,211,138,.14);
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    [data-theme="light"] {
+      --bg: #f3f6fc; --bg2: #e9eef9; --card: #ffffff; --card2: #f6f8fd;
+      --border: #dbe2f0; --text: #18203a; --muted: #5e6a8a;
+      --accent: #2f62e8; --accent2: #7246e8;
+      --danger: #d9293b; --danger-bg: rgba(217,41,59,.10);
+      --warn: #c77800; --warn-bg: rgba(199,120,0,.12);
+      --safe: #128a55; --safe-bg: rgba(18,138,85,.10);
+      --shadow: 0 8px 24px rgba(30,50,100,.08);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      font-family: var(--font); color: var(--text); background: var(--bg);
+      background-image: radial-gradient(1200px 500px at 10% -10%, rgba(91,140,255,.18), transparent 60%),
+                        radial-gradient(900px 500px at 110% 10%, rgba(138,91,255,.14), transparent 60%);
+      background-attachment: fixed; min-height: 100vh; line-height: 1.5;
+    }
+    button, input, textarea { font: inherit; color: inherit; }
+    a { color: var(--accent); }
+
+    /* ---------- Header ---------- */
+    header {
+      position: sticky; top: 0; z-index: 20; backdrop-filter: blur(12px);
+      background: color-mix(in srgb, var(--bg) 80%, transparent); border-bottom: 1px solid var(--border);
+    }
+    .bar { max-width: 1240px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; gap: 20px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; white-space: nowrap; }
+    .logo {
+      width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+      background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff;
+    }
+    .brand small { display: block; font-weight: 500; font-size: 12px; color: var(--muted); }
+    nav { display: flex; gap: 4px; margin-left: auto; background: var(--card); padding: 4px; border-radius: 12px; border: 1px solid var(--border); }
+    nav button {
+      border: 0; background: none; padding: 8px 14px; border-radius: 9px; cursor: pointer; color: var(--muted); font-weight: 600;
+    }
+    nav button.active { background: var(--card2); color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
+    .icon-btn {
+      border: 1px solid var(--border); background: var(--card); width: 40px; height: 40px; border-radius: 11px;
+      cursor: pointer; display: grid; place-items: center;
+    }
+
+    /* ---------- Layout ---------- */
+    main { max-width: 1240px; margin: 0 auto; padding: 24px 20px 60px; }
+    .tab { display: none; animation: fade .25s ease; }
+    .tab.active { display: block; }
+    @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .grid { display: grid; gap: 20px; }
+    .grid-2 { grid-template-columns: 1.15fr .85fr; }
+    .grid-2b { grid-template-columns: 1fr 1fr; }
+    @media (max-width: 960px) { .grid-2, .grid-2b { grid-template-columns: 1fr; } nav button { padding: 8px 10px; } }
+    @media (max-width: 640px) { .brand small { display: none; } .bar { gap: 10px; } }
+    .card {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 20px; box-shadow: var(--shadow);
+    }
+    .card h2 { font-size: 16px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+    .card .sub { color: var(--muted); font-size: 13.5px; margin: 0 0 14px; }
+    .hero h1 { font-size: 30px; margin: 4px 0 6px; letter-spacing: -.5px; }
+    .hero p { color: var(--muted); margin: 0 0 22px; max-width: 720px; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 10px;
+      border-radius: 999px; background: var(--card2); border: 1px solid var(--border); color: var(--muted);
+    }
+
+    /* ---------- Input ---------- */
+    .drop { position: relative; }
+    textarea {
+      width: 100%; min-height: 300px; resize: vertical; padding: 14px; border-radius: 12px;
+      border: 1px solid var(--border); background: var(--bg2); font-size: 14.5px; outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+    .drop.dragging textarea { border-style: dashed; border-color: var(--accent); }
+    .drop-hint {
+      position: absolute; inset: 0; display: none; place-items: center; border-radius: 12px; pointer-events: none;
+      background: color-mix(in srgb, var(--accent) 12%, transparent); font-weight: 700; color: var(--accent);
+    }
+    .drop.dragging .drop-hint { display: grid; }
+    .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .between { justify-content: space-between; }
+    .meta { font-size: 12.5px; color: var(--muted); }
+    .chip {
+      border: 1px solid var(--border); background: var(--card2); padding: 6px 11px; border-radius: 999px;
+      font-size: 12.5px; cursor: pointer; transition: border-color .15s, transform .1s;
+    }
+    .chip:hover { border-color: var(--accent); }
+    .chip:active { transform: scale(.97); }
+    .chip.phish::before { content: "●"; color: var(--danger); margin-right: 6px; }
+    .chip.legit::before { content: "●"; color: var(--safe); margin-right: 6px; }
+    .btn {
+      border: 0; border-radius: 11px; padding: 11px 20px; font-weight: 700; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 8px; transition: filter .15s, transform .1s;
+    }
+    .btn:active { transform: scale(.98); }
+    .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; }
+    .btn-primary:hover { filter: brightness(1.1); }
+    .btn-primary:disabled { filter: grayscale(.6) brightness(.8); cursor: wait; }
+    .btn-ghost { background: var(--card2); border: 1px solid var(--border); }
+    .btn-ghost:hover { border-color: var(--accent); }
+    kbd {
+      font-family: var(--mono); font-size: 11px; padding: 1px 6px; border-radius: 5px;
+      border: 1px solid var(--border); background: var(--bg2); color: var(--muted);
+    }
+    .spinner {
+      width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255,255,255,.4);
+      border-top-color: #fff; animation: spin .7s linear infinite; display: none;
+    }
+    .loading .spinner { display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .alert { padding: 12px 14px; border-radius: 10px; background: var(--danger-bg); color: var(--danger); font-weight: 600; margin-top: 12px; display: none; }
+
+    /* ---------- Verdict ---------- */
+    .verdict { text-align: center; }
+    .gauge { width: 100%; max-width: 300px; display: block; margin: 0 auto; }
+    .gauge .track { stroke: var(--bg2); }
+    .gauge .value { transition: stroke-dashoffset 1s cubic-bezier(.2,.8,.2,1), stroke .4s; }
+    .gauge-num { font-size: 40px; font-weight: 800; margin-top: -78px; letter-spacing: -1px; }
+    .gauge-cap { color: var(--muted); font-size: 12.5px; margin-top: -4px; }
+    .label-big { font-size: 24px; font-weight: 800; margin: 18px 0 6px; display: flex; justify-content: center; align-items: center; gap: 10px; }
+    .badge { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; letter-spacing: .3px; text-transform: uppercase; }
+    .badge.high { background: var(--danger-bg); color: var(--danger); }
+    .badge.medium { background: var(--warn-bg); color: var(--warn); }
+    .badge.low { background: var(--safe-bg); color: var(--safe); }
+    .badge.info { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
+    .advice { color: var(--muted); font-size: 14px; margin: 0 auto 16px; max-width: 380px; }
+    .empty { color: var(--muted); padding: 40px 10px; text-align: center; }
+    .empty .big { font-size: 46px; opacity: .6; }
+    .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; text-align: left; }
+    .stat { background: var(--card2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+    .stat b { display: block; font-size: 18px; }
+    .stat span { font-size: 12px; color: var(--muted); }
+    .tug { margin: 16px 0 4px; text-align: left; }
+    .tug-bar { display: flex; height: 10px; border-radius: 99px; overflow: hidden; background: var(--bg2); }
+    .tug-bar div { transition: width .8s ease; }
+    .tug-labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .actions { display: flex; gap: 8px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+    .actions .btn { padding: 8px 14px; font-size: 13px; }
+
+    /* ---------- Highlighted email ---------- */
+    .email-view {
+      white-space: pre-wrap; word-break: break-word; background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px; max-height: 420px; overflow: auto; font-size: 14.5px; line-height: 1.8;
+    }
+    .email-view mark { color: inherit; border-radius: 4px; padding: 1px 2px; cursor: help; }
+    .legend { display: flex; gap: 14px; font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
+    .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 5px; }
+
+    /* ---------- Word contribution chart ---------- */
+    .contrib { display: grid; gap: 7px; }
+    .c-row { display: grid; grid-template-columns: 1fr 120px 1fr; align-items: center; gap: 8px; font-size: 13.5px; }
+    .c-word { text-align: center; font-family: var(--mono); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .c-left, .c-right { display: flex; align-items: center; gap: 6px; }
+    .c-left { justify-content: flex-end; }
+    .c-bar { height: 14px; border-radius: 4px; width: 0; transition: width .8s ease; }
+    .c-left .c-bar { background: var(--safe); }
+    .c-right .c-bar { background: var(--danger); }
+    .c-val { font-size: 11.5px; color: var(--muted); font-family: var(--mono); min-width: 40px; }
+    .c-left .c-val { text-align: right; }
+    .c-head { display: grid; grid-template-columns: 1fr 120px 1fr; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .c-head span:first-child { text-align: right; } .c-head span:nth-child(2) { text-align: center; }
+
+    /* ---------- Warning signs ---------- */
+    .signals { display: grid; gap: 10px; }
+    .signal { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: 10px; background: var(--card2); border: 1px solid var(--border); }
+    .signal .dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; flex: none; }
+    .signal .dot.high { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-bg); }
+    .signal .dot.medium { background: var(--warn); box-shadow: 0 0 0 4px var(--warn-bg); }
+    .signal .dot.low, .signal .dot.info { background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 15%, transparent); }
+    .signal b { display: block; font-size: 14px; }
+    .signal span { font-size: 13px; color: var(--muted); word-break: break-word; }
+
+    /* ---------- History ---------- */
+    .history { display: grid; gap: 8px; }
+    .h-item {
+      display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 10px 12px;
+      border-radius: 10px; background: var(--card2); border: 1px solid var(--border); cursor: pointer; text-align: left; width: 100%;
+    }
+    .h-item:hover { border-color: var(--accent); }
+    .h-snip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; }
+    .h-time { font-size: 12px; color: var(--muted); }
+
+    #results { margin-top: 20px; display: none; }
+    #results.show { display: grid; }
+
+    /* ---------- Model tab ---------- */
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    @media (max-width: 760px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+    .kpi { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow); }
+    .kpi span { color: var(--muted); font-size: 13px; }
+    .kpi b { display: block; font-size: 30px; letter-spacing: -1px; }
+    .kpi small { color: var(--muted); font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 11px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { font-size: 12px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); font-weight: 700; }
+    tr.main td { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+    tr.main td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+    .cell-bar { display: flex; align-items: center; gap: 8px; }
+    .cell-bar i { display: block; height: 6px; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+    .table-wrap { overflow-x: auto; }
+    .figs { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 18px; }
+    .fig { padding: 0; overflow: hidden; cursor: zoom-in; }
+    .fig img { width: 100%; display: block; background: #fff; aspect-ratio: 16/10; object-fit: contain; }
+    .fig div { padding: 14px 16px; }
+    .fig b { display: block; }
+    .fig span { color: var(--muted); font-size: 13px; }
+    .lightbox { position: fixed; inset: 0; background: rgba(5,8,20,.85); display: none; place-items: center; z-index: 50; padding: 30px; cursor: zoom-out; }
+    .lightbox.show { display: grid; }
+    .lightbox img { max-width: 100%; max-height: 90vh; border-radius: 10px; background: #fff; }
+
+    /* ---------- How it works ---------- */
+    .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
+    .step { position: relative; }
+    .step .n {
+      width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; color: #fff;
+      background: linear-gradient(135deg, var(--accent), var(--accent2)); margin-bottom: 10px;
+    }
+    .step h3 { margin: 0 0 6px; font-size: 15px; }
+    .step p { margin: 0; color: var(--muted); font-size: 13.5px; }
+    .code { font-family: var(--mono); font-size: 12.5px; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-top: 10px; word-break: break-word; }
+    ul.clean { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
+    ul.clean li { margin: 6px 0; }
+    ul.clean b { color: var(--text); }
+
+    footer { text-align: center; color: var(--muted); font-size: 12.5px; padding: 0 20px 30px; }
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); opacity: 0;
+      background: var(--card2); border: 1px solid var(--border); padding: 10px 16px; border-radius: 10px;
+      box-shadow: var(--shadow); transition: all .25s; z-index: 60; font-size: 14px; pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%); }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>Phishing Email Detector</h1>
-    <p class="sub">Paste an email below. The model predicts whether it is phishing and shows which words influenced the decision.</p>
 
-    <form method="post">
-      <textarea name="email" placeholder="Paste email text here..." required>{{ email_text }}</textarea>
-      <button type="submit">Check email</button>
-    </form>
+<header>
+  <div class="bar">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+      </div>
+      <div>PhishGuard<small>Phishing email detector</small></div>
+    </div>
+    <nav role="tablist">
+      <button class="active" data-tab="analyse" role="tab">Analyse</button>
+      <button data-tab="model" role="tab">Model performance</button>
+      <button data-tab="how" role="tab">How it works</button>
+    </nav>
+    <button class="icon-btn" id="themeBtn" title="Switch light / dark theme" aria-label="Switch theme">
+      <svg id="themeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    </button>
+  </div>
+</header>
 
-    {% if error %}
-    <div class="result phishing"><p>{{ error }}</p></div>
+<main>
+
+  <!-- ================= ANALYSE TAB ================= -->
+  <section class="tab active" id="tab-analyse">
+    <div class="hero">
+      <span class="pill">● Logistic Regression · TF-IDF · {{ "{:,}".format(n_features) }} features</span>
+      <h1>Is this email safe?</h1>
+      <p>Paste an email, upload a <b>.txt</b> or <b>.eml</b> file, or try a sample. The model estimates how likely it is to be phishing and shows exactly which words drove the decision.</p>
+    </div>
+
+    <div class="grid grid-2">
+      <!-- Input -->
+      <div class="card">
+        <div class="row between" style="margin-bottom:10px">
+          <h2>Email content</h2>
+          <span class="meta" id="counter">0 / {{ "{:,}".format(max_chars) }} characters</span>
+        </div>
+        <div class="drop" id="drop">
+          <textarea id="email" maxlength="{{ max_chars }}" placeholder="Paste the full email here, including the subject line if you have it..."></textarea>
+          <div class="drop-hint">Drop the file to load it</div>
+        </div>
+        <div class="row" style="margin:12px 0 4px">
+          <span class="meta">Try a sample:</span>
+          <button class="chip phish" data-sample="bank">Bank alert</button>
+          <button class="chip phish" data-sample="prize">Prize winner</button>
+          <button class="chip phish" data-sample="parcel">Parcel delivery</button>
+          <button class="chip legit" data-sample="meeting">Team meeting</button>
+          <button class="chip legit" data-sample="invoice">Supplier invoice</button>
+        </div>
+        <div class="row between" style="margin-top:14px">
+          <div class="row">
+            <button class="btn btn-primary" id="analyseBtn"><span class="spinner"></span><span id="analyseLabel">Analyse email</span></button>
+            <button class="btn btn-ghost" id="uploadBtn" title="Load a .txt or .eml file">Upload file</button>
+            <button class="btn btn-ghost" id="clearBtn">Clear</button>
+            <input type="file" id="file" accept=".txt,.eml,text/plain,message/rfc822" hidden>
+          </div>
+          <span class="meta"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> to analyse</span>
+        </div>
+        <div class="alert" id="error"></div>
+      </div>
+
+      <!-- Verdict -->
+      <div class="card verdict" id="verdictCard">
+        <div class="empty" id="emptyState">
+          <div class="big">🛡️</div>
+          <p>Your result will appear here.<br>Nothing you paste is saved on the server.</p>
+        </div>
+        <div id="verdict" hidden>
+          <svg class="gauge" viewBox="0 0 200 120" aria-hidden="true">
+            <defs>
+              <linearGradient id="g" x1="0" x2="1">
+                <stop offset="0" stop-color="var(--safe)"/><stop offset=".5" stop-color="var(--warn)"/><stop offset="1" stop-color="var(--danger)"/>
+              </linearGradient>
+            </defs>
+            <path class="track" d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke-width="16" stroke-linecap="round"/>
+            <path class="value" id="gaugeArc" d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="url(#g)" stroke-width="16" stroke-linecap="round" stroke-dasharray="251.3" stroke-dashoffset="251.3"/>
+          </svg>
+          <div class="gauge-num" id="probNum">0%</div>
+          <div class="gauge-cap">phishing probability</div>
+          <div class="label-big"><span id="labelText"></span><span class="badge" id="riskBadge"></span></div>
+          <p class="advice" id="advice"></p>
+
+          <div class="tug">
+            <div class="tug-bar"><div id="tugLegit" style="background:var(--safe);width:50%"></div><div id="tugPhish" style="background:var(--danger);width:50%"></div></div>
+            <div class="tug-labels"><span id="tugLegitTxt">Legitimate evidence</span><span id="tugPhishTxt">Phishing evidence</span></div>
+          </div>
+
+          <div class="stats" style="margin-top:16px">
+            <div class="stat"><b id="sWords">0</b><span>words in email</span></div>
+            <div class="stat"><b id="sKnown">0</b><span>known features matched</span></div>
+            <div class="stat"><b id="sSignals">0</b><span>warning signs found</span></div>
+            <div class="stat"><b id="sScore">0</b><span>model score (log-odds)</span></div>
+          </div>
+          <div class="actions">
+            <button class="btn btn-ghost" id="copyBtn">Copy summary</button>
+            <button class="btn btn-ghost" id="downloadBtn">Download report</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-2b" id="results">
+      <div class="card" style="grid-column: 1 / -1">
+        <div class="row between">
+          <div><h2>Highlighted email</h2><p class="sub">Each word is coloured by how much it pushed the model. Hover a word to see its exact weight.</p></div>
+          <div class="legend"><span><i style="background:var(--danger)"></i>towards phishing</span><span><i style="background:var(--safe)"></i>towards legitimate</span></div>
+        </div>
+        <div class="email-view" id="emailView"></div>
+      </div>
+
+      <div class="card">
+        <h2>Words behind the decision</h2>
+        <p class="sub">The 12 words or phrases with the biggest influence (TF-IDF value × model weight).</p>
+        <div class="c-head"><span>← legitimate</span><span>word</span><span>phishing →</span></div>
+        <div class="contrib" id="contrib"></div>
+        <p class="meta" id="noWords" hidden>None of the words in this email are in the model's vocabulary, so the prediction is uncertain.</p>
+      </div>
+
+      <div class="card">
+        <h2>Warning signs</h2>
+        <p class="sub">Rule-based checks that cyber-security guidance recommends. These are shown alongside the model and do not change its score.</p>
+        <div class="signals" id="signals"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px" id="historyCard" hidden>
+      <div class="row between">
+        <div><h2>Recent checks</h2><p class="sub">Stored only in this browser tab and deleted when you close it. Click one to load it again.</p></div>
+        <button class="btn btn-ghost" id="clearHistory" style="padding:7px 12px;font-size:13px">Clear history</button>
+      </div>
+      <div class="history" id="history"></div>
+    </div>
+  </section>
+
+  <!-- ================= MODEL TAB ================= -->
+  <section class="tab" id="tab-model">
+    <div class="hero">
+      <span class="pill">● Main model: Logistic Regression</span>
+      <h1>Model performance</h1>
+      <p>Four algorithms were trained and tuned with 5-fold cross-validation on 57,452 emails and tested on 24,623 unseen emails. Logistic Regression is the main model: it is nearly as accurate as the best model and, unlike SVM, it gives a probability and a clear explanation for every prediction.</p>
+    </div>
+
+    {% set main = results[0] if results else None %}
+    {% if main %}
+    <div class="kpis">
+      <div class="kpi"><span>Accuracy</span><b>{{ main.accuracy }}%</b><small>emails classified correctly</small></div>
+      <div class="kpi"><span>Precision</span><b>{{ main.precision }}%</b><small>of phishing alerts were real phishing</small></div>
+      <div class="kpi"><span>Recall</span><b>{{ main.recall }}%</b><small>of phishing emails were caught</small></div>
+      <div class="kpi"><span>F1 score</span><b>{{ main.f1 }}%</b><small>balance of precision and recall</small></div>
+    </div>
+
+    <div class="card" style="margin-top:20px">
+      <h2>Algorithm comparison</h2>
+      <p class="sub">Results on the test set after hyperparameter tuning. The highlighted row is the model used by this app.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Algorithm</th><th>Best settings</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1</th><th>CV F1</th></tr></thead>
+          <tbody>
+          {% for r in results %}
+            <tr class="{{ 'main' if r.main }}">
+              <td><b>{{ r.name }}</b>{% if r.main %} <span class="badge info">Main</span>{% endif %}</td>
+              <td><code>{{ r.settings }}</code></td>
+              {% for v in [r.accuracy, r.precision, r.recall, r.f1, r.cv_f1] %}
+              <td><div class="cell-bar"><span>{{ v }}%</span><i style="width:{{ ((v - 90) * 6) if v > 90 else 2 }}px"></i></div></td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% else %}
+    <div class="card"><p class="sub">Run the notebook to create <code>figures/tuned_results.csv</code> and the results will appear here.</p></div>
     {% endif %}
 
-    {% if result %}
-    <div class="result {{ 'phishing' if result.label == 'Phishing' else 'legitimate' }}">
-      <h2>{{ result.label }} ({{ result.prob }}% phishing probability)</h2>
-      {% if result.words %}
-      <p>Top words behind this decision:</p>
-      <table>
-        <tr><th>Word</th><th>Influence</th></tr>
-        {% for w in result.words %}
-        <tr>
-          <td>{{ w.word }}</td>
-          <td class="{{ 'pos' if w.weight > 0 else 'neg' }}">{{ w.weight }} → {{ 'phishing' if w.weight > 0 else 'legitimate' }}</td>
-        </tr>
-        {% endfor %}
-      </table>
-      {% else %}
-      <p>No known words found. The prediction is uncertain.</p>
-      {% endif %}
+    {% if figures %}
+    <h2 style="margin:28px 0 14px;font-size:18px">Charts from the notebook</h2>
+    <div class="figs">
+      {% for f in figures %}
+      <div class="card fig" data-src="{{ url_for('figure', name=f[0]) }}">
+        <img src="{{ url_for('figure', name=f[0]) }}" alt="{{ f[1] }}" loading="lazy">
+        <div><b>{{ f[1] }}</b><span>{{ f[2] }}</span></div>
+      </div>
+      {% endfor %}
     </div>
     {% endif %}
+  </section>
 
-    <p class="note">Prototype for 605IT: Logistic Regression trained on the Kaggle Phishing Email Dataset. Emails are not stored.</p>
-  </div>
+  <!-- ================= HOW IT WORKS TAB ================= -->
+  <section class="tab" id="tab-how">
+    <div class="hero">
+      <span class="pill">● Pipeline</span>
+      <h1>How it works</h1>
+      <p>Every email goes through the same five steps that were used to train the model in the notebook.</p>
+    </div>
+    <div class="steps">
+      <div class="card step"><div class="n">1</div><h3>Clean the text</h3><p>Lowercase the text, replace links and email addresses with placeholder tokens, and remove numbers and symbols.</p><div class="code">http://bank.com → urltoken</div></div>
+      <div class="card step"><div class="n">2</div><h3>Remove noise</h3><p>Drop common stop words ("the", "and") and lemmatise words to their base form.</p><div class="code">accounts → account</div></div>
+      <div class="card step"><div class="n">3</div><h3>TF-IDF</h3><p>Turn the text into numbers: how important each word and two-word phrase is in this email compared to all emails.</p><div class="code">50,000 words &amp; phrases</div></div>
+      <div class="card step"><div class="n">4</div><h3>Chi-square selection</h3><p>Keep only the features that best separate phishing from legitimate email.</p><div class="code">50,000 → {{ "{:,}".format(n_features) }} features</div></div>
+      <div class="card step"><div class="n">5</div><h3>Logistic Regression</h3><p>Each feature has a learned weight. The weighted sum is turned into a probability, and 50% or more means phishing.</p><div class="code">P = 1 / (1 + e<sup>−score</sup>)</div></div>
+    </div>
+
+    <div class="grid grid-2b" style="margin-top:20px">
+      <div class="card">
+        <h2>Why Logistic Regression?</h2>
+        <ul class="clean">
+          <li><b>Explainable:</b> every word has a weight, so the app can show why it made each decision.</li>
+          <li><b>Gives a probability:</b> users see how confident the model is, not just yes or no.</li>
+          <li><b>Accurate:</b> about 98% accuracy, within 0.2% of the best model tested.</li>
+          <li><b>Fast and light:</b> predictions take milliseconds and the model file is only 40 KB.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h2>Limitations</h2>
+        <ul class="clean">
+          <li><b>Text only:</b> the model does not check sender addresses, headers, attachments or where links really lead.</li>
+          <li><b>Dataset age:</b> much of the training data is from older public corpora (for example Enron, 2000s), so new phishing styles may be missed.</li>
+          <li><b>Dataset patterns:</b> some words reflect the dataset rather than phishing itself (for example "enron" or "python" point to legitimate).</li>
+          <li><b>English only:</b> emails in other languages will not be understood.</li>
+          <li><b>A helper, not a guarantee:</b> always verify suspicious emails through an official channel.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>PhishGuard · 605IT prototype · Logistic Regression trained on the Kaggle Phishing Email Dataset · Emails are not stored on the server.</footer>
+
+<div class="lightbox" id="lightbox"><img alt=""></div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => document.querySelectorAll(s);
+  const MAX = {{ max_chars }};
+  let last = null;   // last result, for copy / download
+
+  // ---------- Tabs ----------
+  $$("nav button").forEach((b) => b.addEventListener("click", () => {
+    $$("nav button").forEach((x) => x.classList.toggle("active", x === b));
+    $$(".tab").forEach((t) => t.classList.toggle("active", t.id === "tab-" + b.dataset.tab));
+    history.replaceState(null, "", "#" + b.dataset.tab);
+  }));
+  const startTab = location.hash.slice(1);
+  if (startTab) { const b = document.querySelector(`nav button[data-tab="${startTab}"]`); if (b) b.click(); }
+
+  // ---------- Theme ----------
+  const moon = '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>';
+  const sun = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
+  const setIcon = () => { $("#themeIcon").innerHTML = document.documentElement.dataset.theme === "dark" ? sun : moon; };
+  setIcon();
+  $("#themeBtn").addEventListener("click", () => {
+    const t = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = t; localStorage.setItem("theme", t); setIcon();
+  });
+
+  // ---------- Toast ----------
+  let toastTimer;
+  function toast(msg) {
+    const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+  }
+
+  // ---------- Input helpers ----------
+  const box = $("#email");
+  const updateCounter = () => { $("#counter").textContent = `${box.value.length.toLocaleString()} / ${MAX.toLocaleString()} characters`; };
+  box.addEventListener("input", updateCounter);
+
+  const SAMPLES = {
+    bank: "Subject: URGENT: Your account has been suspended\n\nDear Customer,\n\nWe detected unusual activity on your online banking account. For your security, your account has been temporarily suspended.\n\nTo restore access, you must verify your identity within 24 hours by clicking the link below and confirming your login details and password:\n\nhttp://192.168.45.12/secure-banking/verify\n\nFailure to verify immediately will result in permanent closure of your account.\n\nThank you,\nOnline Security Department",
+    prize: "Subject: CONGRATULATIONS!!! You are our lucky WINNER\n\nDear Friend,\n\nYour email address has been selected in our international lottery draw and you have WON $1,500,000.00 USD!!!\n\nTo claim your prize, reply with your full name, home address, phone number and bank account details so we can transfer the funds. A small processing fee is required.\n\nThis offer expires in 48 hours. Act now!\n\nRegards,\nMr. James Williams\nClaims Agent",
+    parcel: "Subject: Delivery attempt failed - action required\n\nHello,\n\nWe tried to deliver your parcel today but nobody was available to sign for it. Your package is being held at our depot.\n\nPlease confirm your address and pay the redelivery fee of £1.99 here: https://bit.ly/parcel-redeliver\n\nIf you do not respond within 2 days the parcel will be returned to the sender.\n\nCustomer Service Team",
+    meeting: "Subject: Notes from today's project meeting\n\nHi team,\n\nThanks for joining the meeting this afternoon. I've attached the notes and the updated timeline for the next sprint.\n\nAction points:\n- Sarah will finish the database schema by Thursday\n- Ahmed will review the test plan\n- I'll set up the demo for the client on Monday\n\nLet me know if I missed anything.\n\nThanks,\nJohn",
+    invoice: "Subject: Re: Invoice 4471 for October\n\nHi Priya,\n\nThanks for your email. I've checked the invoice against our purchase order and everything looks correct. I've forwarded it to our finance team and payment should go out with the next run at the end of the month.\n\nI'll be out of the office on Friday, so please contact David if you need anything before then.\n\nBest regards,\nMark",
+  };
+  $$("[data-sample]").forEach((b) => b.addEventListener("click", () => {
+    box.value = SAMPLES[b.dataset.sample]; updateCounter(); analyse();
+  }));
+
+  // Open the page with ?sample=bank (or prize, parcel, meeting, invoice) to run a demo straight away
+  const demo = new URLSearchParams(location.search).get("sample");
+  if (demo && SAMPLES[demo]) { box.value = SAMPLES[demo]; updateCounter(); setTimeout(() => analyse(true), 0); }
+
+  $("#clearBtn").addEventListener("click", () => {
+    box.value = ""; updateCounter(); box.focus();
+    $("#verdict").hidden = true; $("#emptyState").hidden = false;
+    $("#results").classList.remove("show"); hideError(); last = null;
+  });
+
+  // ---------- File upload / drag and drop ----------
+  function readEmailFile(file) {
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { showError("That file is too large. Please use a file under 2 MB."); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      let text = String(reader.result);
+      if (/\.eml$/i.test(file.name)) text = parseEml(text);
+      box.value = text.slice(0, MAX); updateCounter();
+      toast(`Loaded ${file.name}`);
+    };
+    reader.readAsText(file);
+  }
+  function parseEml(raw) {
+    // Keep the subject line, drop technical headers, keep the body
+    const split = raw.search(/\r?\n\r?\n/);
+    const headers = split > 0 ? raw.slice(0, split) : "";
+    let body = split > 0 ? raw.slice(split).trim() : raw;
+    const subject = (headers.match(/^Subject:\s*(.*)$/mi) || [])[1];
+    body = body.replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/[ \t]+/g, " ");
+    return (subject ? `Subject: ${subject}\n\n` : "") + body;
+  }
+  $("#uploadBtn").addEventListener("click", () => $("#file").click());
+  $("#file").addEventListener("change", (e) => { readEmailFile(e.target.files[0]); e.target.value = ""; });
+  const drop = $("#drop");
+  ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("dragging"); }));
+  ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("dragging"); }));
+  drop.addEventListener("drop", (e) => readEmailFile(e.dataTransfer.files[0]));
+
+  // ---------- Errors ----------
+  function showError(msg) { const e = $("#error"); e.textContent = msg; e.style.display = "block"; }
+  function hideError() { $("#error").style.display = "none"; }
+
+  // ---------- Analyse ----------
+  async function analyse(fromHistory) {
+    const text = box.value;
+    if (!text.trim()) { showError("Please paste an email first."); box.focus(); return; }
+    hideError();
+    const btn = $("#analyseBtn");
+    btn.disabled = true; btn.classList.add("loading"); $("#analyseLabel").textContent = "Analysing...";
+    try {
+      const res = await fetch("/api/analyse", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: text }),
+      });
+      const data = await res.json().catch(() => ({ error: "The server returned an unexpected response." }));
+      if (!res.ok || data.error) throw new Error(data.error || "Something went wrong.");
+      last = { ...data, text };
+      render(data);
+      if (!fromHistory) saveHistory(text, data);
+    } catch (err) {
+      showError(err.message === "Failed to fetch" ? "Cannot reach the server. Is app.py still running?" : err.message);
+    } finally {
+      btn.disabled = false; btn.classList.remove("loading"); $("#analyseLabel").textContent = "Analyse email";
+    }
+  }
+  $("#analyseBtn").addEventListener("click", () => analyse());
+  box.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") analyse(); });
+
+  const ADVICE = {
+    high: "Do not click links, open attachments or reply with personal details. Report it and delete it.",
+    medium: "Be careful. Check the sender and verify any request through an official website or phone number.",
+    low: "This looks like a normal email, but always stay alert for unexpected requests.",
+  };
+  const RISK_TEXT = { high: "High risk", medium: "Suspicious", low: "Low risk" };
+
+  function render(d) {
+    $("#emptyState").hidden = true; $("#verdict").hidden = false;
+
+    // Gauge + number (animated)
+    const arc = $("#gaugeArc"); arc.style.strokeDashoffset = 251.3;
+    requestAnimationFrame(() => requestAnimationFrame(() => { arc.style.strokeDashoffset = 251.3 * (1 - d.prob / 100); }));
+    countUp($("#probNum"), d.prob);
+
+    const colour = d.risk === "high" ? "var(--danger)" : d.risk === "medium" ? "var(--warn)" : "var(--safe)";
+    $("#labelText").textContent = d.label; $("#labelText").style.color = colour;
+    const badge = $("#riskBadge"); badge.textContent = RISK_TEXT[d.risk]; badge.className = "badge " + d.risk;
+    $("#advice").textContent = ADVICE[d.risk];
+
+    // Evidence tug-of-war
+    const p = d.push_phishing, l = Math.abs(d.push_legit), total = p + l || 1;
+    $("#tugPhish").style.width = (p / total * 100) + "%";
+    $("#tugLegit").style.width = (l / total * 100) + "%";
+    $("#tugPhishTxt").textContent = `Phishing evidence +${p.toFixed(2)}`;
+    $("#tugLegitTxt").textContent = `Legitimate evidence −${l.toFixed(2)}`;
+
+    $("#sWords").textContent = d.stats.words.toLocaleString();
+    $("#sKnown").textContent = d.stats.known_features.toLocaleString();
+    $("#sSignals").textContent = d.signals.filter((s) => s.level !== "info").length;
+    $("#sScore").textContent = (d.score > 0 ? "+" : "") + d.score.toFixed(2);
+
+    renderHighlight(d.segments);
+    renderContrib(d.words);
+    renderSignals(d.signals);
+    $("#results").classList.add("show");
+  }
+
+  function countUp(el, target) {
+    const start = performance.now(), dur = 900;
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / dur), eased = 1 - Math.pow(1 - t, 3);
+      el.textContent = (target * eased).toFixed(1) + "%";
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  function renderHighlight(segments) {
+    const view = $("#emailView"); view.textContent = "";
+    const maxW = Math.max(0.0001, ...segments.filter((s) => s.w).map((s) => Math.abs(s.w)));
+    const frag = document.createDocumentFragment();
+    for (const s of segments) {
+      if (!s.w) { frag.appendChild(document.createTextNode(s.t)); continue; }
+      const m = document.createElement("mark");
+      const strength = 0.15 + 0.65 * Math.min(1, Math.abs(s.w) / maxW);
+      const base = s.w > 0 ? "255,93,108" : "47,211,138";
+      m.style.background = `rgba(${base},${strength.toFixed(2)})`;
+      m.title = `${s.w > 0 ? "Towards phishing" : "Towards legitimate"}: ${s.w > 0 ? "+" : ""}${s.w}`;
+      m.textContent = s.t;
+      frag.appendChild(m);
+    }
+    view.appendChild(frag);
+  }
+
+  function renderContrib(words) {
+    const box = $("#contrib"); box.textContent = "";
+    $("#noWords").hidden = words.length > 0;
+    const maxW = Math.max(0.0001, ...words.map((w) => Math.abs(w.weight)));
+    for (const w of words) {
+      const row = document.createElement("div"); row.className = "c-row";
+      const left = document.createElement("div"); left.className = "c-left";
+      const mid = document.createElement("div"); mid.className = "c-word"; mid.textContent = w.word; mid.title = w.word;
+      const right = document.createElement("div"); right.className = "c-right";
+      const bar = document.createElement("div"); bar.className = "c-bar";
+      const val = document.createElement("span"); val.className = "c-val";
+      val.textContent = (w.weight > 0 ? "+" : "") + w.weight.toFixed(2);
+      if (w.weight < 0) left.append(val, bar); else right.append(bar, val);
+      row.append(left, mid, right); box.appendChild(row);
+      requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.width = (Math.abs(w.weight) / maxW * 100) + "%"; }));
+    }
+  }
+
+  function renderSignals(signals) {
+    const box = $("#signals"); box.textContent = "";
+    if (!signals.length) {
+      const ok = document.createElement("div"); ok.className = "signal";
+      ok.innerHTML = '<div class="dot low" style="background:var(--safe);box-shadow:0 0 0 4px var(--safe-bg)"></div><div><b>No common warning signs found</b><span>No suspicious links, urgent wording or requests for personal details were detected.</span></div>';
+      box.appendChild(ok); return;
+    }
+    const order = { high: 0, medium: 1, low: 2, info: 3 };
+    for (const s of [...signals].sort((a, b) => order[a.level] - order[b.level])) {
+      const el = document.createElement("div"); el.className = "signal";
+      const dot = document.createElement("div"); dot.className = "dot " + s.level;
+      const body = document.createElement("div");
+      const b = document.createElement("b"); b.textContent = s.name;
+      const sp = document.createElement("span"); sp.textContent = s.detail;
+      body.append(b, sp); el.append(dot, body); box.appendChild(el);
+    }
+  }
+
+  // ---------- History (this browser tab only) ----------
+  const HKEY = "phishguard-history";
+  const getHistory = () => { try { return JSON.parse(sessionStorage.getItem(HKEY)) || []; } catch { return []; } };
+  function saveHistory(text, d) {
+    const h = getHistory().filter((x) => x.text !== text);
+    h.unshift({ text: text.slice(0, 5000), label: d.label, prob: d.prob, risk: d.risk, time: Date.now() });
+    sessionStorage.setItem(HKEY, JSON.stringify(h.slice(0, 8)));
+    renderHistory();
+  }
+  function renderHistory() {
+    const h = getHistory(), list = $("#history");
+    $("#historyCard").hidden = h.length === 0; list.textContent = "";
+    for (const item of h) {
+      const b = document.createElement("button"); b.className = "h-item";
+      const badge = document.createElement("span"); badge.className = "badge " + item.risk; badge.textContent = `${item.label} · ${item.prob}%`;
+      const snip = document.createElement("span"); snip.className = "h-snip"; snip.textContent = item.text.replace(/\s+/g, " ").slice(0, 140);
+      const time = document.createElement("span"); time.className = "h-time"; time.textContent = new Date(item.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      b.append(badge, snip, time);
+      b.addEventListener("click", () => { box.value = item.text; updateCounter(); window.scrollTo({ top: 0, behavior: "smooth" }); analyse(true); });
+      list.appendChild(b);
+    }
+  }
+  $("#clearHistory").addEventListener("click", () => { sessionStorage.removeItem(HKEY); renderHistory(); toast("History cleared"); });
+  renderHistory();
+
+  // ---------- Copy / download report ----------
+  function summary(d) {
+    const lines = [
+      "PhishGuard report",
+      "=================",
+      `Date: ${new Date().toLocaleString()}`,
+      `Result: ${d.label} (${d.prob}% phishing probability, ${RISK_TEXT[d.risk]})`,
+      `Model: Logistic Regression (TF-IDF + chi-square)`,
+      "",
+      "Top words behind the decision (+ phishing, - legitimate):",
+      ...d.words.map((w) => `  ${w.word.padEnd(22)} ${w.weight > 0 ? "+" : ""}${w.weight}`),
+      "",
+      "Warning signs:",
+      ...(d.signals.length ? d.signals.map((s) => `  [${s.level.toUpperCase()}] ${s.name} - ${s.detail}`) : ["  None found"]),
+      "",
+      `Advice: ${ADVICE[d.risk]}`,
+    ];
+    return lines.join("\n");
+  }
+  $("#copyBtn").addEventListener("click", async () => {
+    if (!last) return;
+    try { await navigator.clipboard.writeText(summary(last)); toast("Summary copied"); }
+    catch { toast("Could not copy. Your browser blocked clipboard access."); }
+  });
+  $("#downloadBtn").addEventListener("click", () => {
+    if (!last) return;
+    const text = summary(last) + "\n\n--- Email analysed ---\n" + last.text;
+    const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+    const a = Object.assign(document.createElement("a"), { href: url, download: `phishguard-report-${Date.now()}.txt` });
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  });
+
+  // ---------- Figure lightbox ----------
+  const lb = $("#lightbox");
+  $$(".fig").forEach((f) => f.addEventListener("click", () => { lb.querySelector("img").src = f.dataset.src; lb.classList.add("show"); }));
+  lb.addEventListener("click", () => lb.classList.remove("show"));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") lb.classList.remove("show"); });
+})();
+</script>
 </body>
 </html>
