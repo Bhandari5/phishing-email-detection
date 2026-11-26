@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PhishGuard · Phishing Email Detector</title>
+  <title>Phishing Email Detector</title>
   <script>
     // Apply the saved theme before the page draws (avoids a flash)
     document.documentElement.dataset.theme = localStorage.getItem("theme") || "dark";
@@ -264,7 +264,7 @@
       <div class="logo" aria-hidden="true">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
       </div>
-      <div>PhishGuard<small>Phishing email detector</small></div>
+      <div>Phishing Email Detector<small>Machine learning email checker</small></div>
     </div>
     <nav role="tablist">
       <button class="active" data-tab="analyse" role="tab">Analyse</button>
@@ -484,7 +484,7 @@
   </section>
 </main>
 
-<footer>PhishGuard · 605IT prototype · Logistic Regression trained on the Kaggle Phishing Email Dataset · Emails are not stored on the server.</footer>
+<footer>Phishing Email Detector · 605IT prototype · Logistic Regression trained on the Kaggle Phishing Email Dataset · Emails are not stored on the server.</footer>
 
 <div class="lightbox" id="lightbox"><img alt=""></div>
 <div class="toast" id="toast"></div>
@@ -708,7 +708,7 @@
   }
 
   // ---------- History (this browser tab only) ----------
-  const HKEY = "phishguard-history";
+  const HKEY = "phishing-detector-history";
   const getHistory = () => { try { return JSON.parse(sessionStorage.getItem(HKEY)) || []; } catch { return []; } };
   function saveHistory(text, d) {
     const h = getHistory().filter((x) => x.text !== text);
@@ -735,8 +735,8 @@
   // ---------- Copy / download report ----------
   function summary(d) {
     const lines = [
-      "PhishGuard report",
-      "=================",
+      "Phishing Email Detector report",
+      "==============================",
       `Date: ${new Date().toLocaleString()}`,
       `Result: ${d.label} (${d.prob}% phishing probability, ${RISK_TEXT[d.risk]})`,
       `Model: Logistic Regression (TF-IDF + chi-square)`,
@@ -760,7 +760,7 @@
     if (!last) return;
     const text = summary(last) + "\n\n--- Email analysed ---\n" + last.text;
     const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
-    const a = Object.assign(document.createElement("a"), { href: url, download: `phishguard-report-${Date.now()}.txt` });
+    const a = Object.assign(document.createElement("a"), { href: url, download: `phishing-report-${Date.now()}.txt` });
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   });
 
