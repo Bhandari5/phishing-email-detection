@@ -180,3 +180,8 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 *.csv
+
+# Large dataset files (download from Kaggle instead)
+archive (1).zip
+archive (1)/
+.vscode/
